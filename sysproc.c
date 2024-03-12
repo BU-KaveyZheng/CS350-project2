@@ -112,3 +112,9 @@ int sys_enable_sched_trace(void)
 
   return 0;
 }
+
+int sys_fork_winner(void) {
+  int winner;
+  if ( argint(0, &winner) < 0 ) { return -1; }
+  return 0;
+}
