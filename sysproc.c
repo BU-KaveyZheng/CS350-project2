@@ -114,7 +114,10 @@ int sys_enable_sched_trace(void)
 }
 
 int sys_fork_winner(void) {
-  int winner;
-  if ( argint(0, &winner) < 0 ) { return -1; }
+  int tmp;
+  if ( argint(0, &tmp) < 0 ) { return -1; }
+  
+  policy = (tmp) ? 1 : 0;
+
   return 0;
 }
