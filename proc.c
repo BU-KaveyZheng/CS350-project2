@@ -220,6 +220,28 @@ fork(void)
 
   acquire(&ptable.lock);
   np->state = RUNNABLE;
+
+  // Keep track of total processes after fork()
+  int total_processes = 0;
+  struct proc *p;
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if ( p->state == RUNNABLE || p->state == RUNNING ) total_processes++;
+  }
+  // Update tickets after new process is created
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if ( p->state == RUNNABLE || p->state == RUNNING ) {
+      p->tickets = 100 / total_processes;
+      p->stride = 1000 / p->tickets;
+      p->pass += p->stride;
+    }
+    // If process BLOCKED, then do not consider
+    else {
+      p->tickets = 0;
+      p->stride = 0;
+      p->pass = 0;
+    }
+  }
+
   release(&ptable.lock);
 
   /*
@@ -332,6 +354,18 @@ wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
+
+// Declare global var stride_policy
+int stride_policy;
+
+int tickets_owned(int pid) {
+  struct proc *p;
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->pid == pid) return p->tickets;
+  }
+  return 0;
+}
+
 void
 scheduler(void)
 {
