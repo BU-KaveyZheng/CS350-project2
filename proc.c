@@ -180,7 +180,7 @@ growproc(int n)
 // Sets up stack to return as if from system call.
 // Caller must set state of returned proc to RUNNABLE.
 
-// Declare global cp_policy var
+// Declare global var cp_policy
 int cp_policy;
 
 int
@@ -222,9 +222,9 @@ fork(void)
   np->state = RUNNABLE;
   release(&ptable.lock);
 
-  /* 
-    0- Parent first
-    1- Child first
+  /*
+    0 - Parent first
+    1 - Child first
   */
   if (cp_policy) {
     curproc->state = RUNNING;
@@ -332,10 +332,6 @@ wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
-
-// Declare global stride_policy var
-int stride_policy;
-
 void
 scheduler(void)
 {
