@@ -24,6 +24,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int fork_winner(int);
+int set_sched(int);
 
 // ulib.c
 int stat(char*, struct stat*);

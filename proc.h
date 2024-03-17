@@ -12,7 +12,8 @@ struct cpu {
 
 extern struct cpu cpus[NCPU];
 extern int ncpu;
-extern int policy;
+extern int cp_policy;
+extern int stride_policy;
 
 //PAGEBREAK: 17
 // Saved registers for kernel context switches.
