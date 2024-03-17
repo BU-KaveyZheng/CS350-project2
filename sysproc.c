@@ -128,3 +128,9 @@ int sys_tickets_owned(void) {
   if ( argint(0, &pid) < 0 ) return -1;
   tickets_owned(pid); 
 }
+
+int sys_transfer_tickets(void) {
+  int recipient, num;
+  if ( argint(0, &recipient) < 0 || argint(0, &num) < 0) return -1;
+  transfer_tickets(recipient, num);
+}

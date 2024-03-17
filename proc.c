@@ -358,6 +358,22 @@ wait(void)
 // Declare global var stride_policy
 int stride_policy;
 
+int transfer_tickets(int recipient, int num) {
+  struct proc *curproc = myproc(); 
+  if ( num >= curproc->tickets ) return -2;
+
+  struct proc *p;
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->pid == recipient) {
+      p->tickets += num;
+      curproc->tickets -= num;
+      break;
+    }
+  }
+
+  return -3;
+}
+
 int tickets_owned(int pid) {
   struct proc *p;
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
