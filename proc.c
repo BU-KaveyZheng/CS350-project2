@@ -191,9 +191,7 @@ fork(void)
   struct proc *curproc = myproc();
 
   // Allocate process.
-  if((np = allocproc()) == 0){
-    return -1;
-  }
+  if((np = allocproc()) == 0) return -1;
 
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
@@ -220,28 +218,10 @@ fork(void)
 
   acquire(&ptable.lock);
   np->state = RUNNABLE;
+  release(&ptable.lock);
 
-  // Keep track of total processes after fork()
-  int total_processes = 0;
-  struct proc *p;
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-    if ( p->state == RUNNABLE || p->state == RUNNING ) total_processes++;
-  }
-  // Update tickets after new process is created
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-    if ( p->state == RUNNABLE || p->state == RUNNING ) {
-      p->tickets = 100 / total_processes;
-      p->stride = 1000 / p->tickets;
-      p->pass += p->stride;
-    }
-    // If process BLOCKED, then do not consider
-    else {
-      p->tickets = 0;
-      p->stride = 0;
-      p->pass = 0;
-    }
-  }
-
+  acquire(&ptable.lock);
+  update_tickets();
   release(&ptable.lock);
 
   /*
@@ -298,6 +278,9 @@ exit(void)
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
+
+  update_tickets();
+
   sched();
   panic("zombie exit");
 }
@@ -358,34 +341,64 @@ wait(void)
 // Declare global var stride_policy
 int stride_policy;
 
-int transfer_tickets(int recipient, int num) {
-  struct proc *curproc = myproc(); 
-  if ( num >= curproc->tickets ) return -2;
-
+void update_tickets(void) {
+  // Keep track of total processes after fork()
+  int total_processes = 0;
   struct proc *p;
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-    if (p->pid == recipient) {
-      p->tickets += num;
-      curproc->tickets -= num;
-      break;
+    if ( p->state == RUNNABLE || p->state == RUNNING ) total_processes++;
+  }
+  // Update tickets after new process is created
+  int t = 100 / total_processes;
+  int sp = 1000 / t;
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if ( p->state == RUNNABLE || p->state == RUNNING ) {
+      p->tickets = t;
+      p->stride = sp;
+      p->pass = 0;
     }
   }
-
-  return -3;
 }
 
 int tickets_owned(int pid) {
   struct proc *p;
+  acquire(&ptable.lock);
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-    if (p->pid == pid) return p->tickets;
+    if (p->pid == pid) {
+      release(&ptable.lock);
+      return p->tickets;
+    }
   }
+  release(&ptable.lock);
   return 0;
+}
+
+int transfer_tickets(int recipient, int num) {
+  struct proc *curproc = myproc(); 
+  if(num < 0) return -1;
+  if ( num > curproc->tickets - 1 ) return -2;
+
+  acquire(&ptable.lock);
+  for (struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->pid == recipient) {
+      p->tickets += num;
+      p->stride = 1000 / p->tickets;
+
+      curproc->tickets -= num;
+      curproc->stride = 1000 / curproc->tickets;
+      
+      release(&ptable.lock);
+      return curproc->tickets;
+    }
+  }
+  release(&ptable.lock);
+  return -3;
 }
 
 void
 scheduler(void)
 {
-  struct proc *p;
+  struct proc *p, *process_to_run, *p1;
   struct cpu *c = mycpu();
   c->proc = 0;
   
@@ -395,34 +408,70 @@ scheduler(void)
     // Enable interrupts on this processor.
     sti();
 
-        // Loop over process table looking for process to run.
-        acquire(&ptable.lock);
-        ran = 0;
-        for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-          if(p->state != RUNNABLE)
-            continue;
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    ran = 0;
 
-          ran = 1;
-      
-          // Switch to chosen process.  It is the process's job
-          // to release ptable.lock and then reacquire it
-          // before jumping back to us.
-          c->proc = p;
-          switchuvm(p);
-          p->state = RUNNING;
+    // START STRIDE CODE
+    if (stride_policy) {
+          
+      ran = 0;
+      int min_pass = 9999;
+      int min_pass_pid = 9999;
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        if (p->state != RUNNABLE) continue;
 
-          swtch(&(c->scheduler), p->context);
-          switchkvm();
+        if ( (p->pass < min_pass) || ( (p->pass == min_pass) && (p->pid < min_pass_pid) ) ) {
+          min_pass = p->pass;
+          min_pass_pid = p->pid;
+          process_to_run = p;
+        }
+      }
 
-          // Process is done running for now.
-          // It should have changed its p->state before coming back.
-          c->proc = 0;
+      p = process_to_run;
+      p->pass += p->stride;
+
+      // Boiler plate from original code
+      ran = 1;
+      c->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&(c->scheduler), p->context);
+      switchkvm();
+      c->proc = 0;
+
     }
+    // END STRIDE CODE
+
+    // START RR CODE
+    else {
+
+      ran = 0;
+
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state != RUNNABLE) continue;
+
+        ran = 1;
+        // Switch to chosen process.  It is the process's job
+        // to release ptable.lock and then reacquire it
+         // before jumping back to us.
+        c->proc = p;
+        switchuvm(p);
+        p->state = RUNNING;
+
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
+
+    }
+    // END RR CODE
+
     release(&ptable.lock);
-
-    if (ran == 0){
-        halt();
-    }
+    if (ran == 0) halt();
   }
 }
 

@@ -126,11 +126,11 @@ int sys_set_sched(void) {
 int sys_tickets_owned(void) {
   int pid;
   if ( argint(0, &pid) < 0 ) return -1;
-  tickets_owned(pid); 
+  return tickets_owned(pid); 
 }
 
 int sys_transfer_tickets(void) {
   int recipient, num;
-  if ( argint(0, &recipient) < 0 || argint(0, &num) < 0) return -1;
-  transfer_tickets(recipient, num);
+  if ( argint(0, &recipient) < 0 || argint(1, &num) < 0 ) return -1;
+  return transfer_tickets(recipient, num);
 }
