@@ -398,7 +398,7 @@ int transfer_tickets(int recipient, int num) {
 void
 scheduler(void)
 {
-  struct proc *p, *process_to_run, *p1;
+  struct proc *p, *process_to_run;
   struct cpu *c = mycpu();
   c->proc = 0;
   
